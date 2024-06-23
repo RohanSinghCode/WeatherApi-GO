@@ -19,18 +19,22 @@ type WeatherClient struct {
 }
 
 type WeatherResponse struct {
-	Location    string `json:"location"`
-	Temperature string `json:"temperature"`
-	Unit        string `json:"unit"`
-	Condition   string `json:"condition"`
+	Weather     []Weather `json:"weather"`
+	Temperature Main      `json:"main"`
+	Units       string    `json:"units"`
+	Condition   string    `json:"condition"`
+	Name        string    `json:"name"`
 }
 
-type GeoCodingResponse struct {
-	Zip     string `json:"zip"`
-	Name    string `json:"name"`
-	Lat     string `json:"lat"`
-	Lon     string `json:"lon"`
-	Country string `json:"country"`
+type Main struct {
+	Temperature    float32 `json:"temp"`
+	TemperatureMax float32 `json:"temp_max"`
+	TemperatureMin float32 `json:"temp_min"`
+}
+
+type Weather struct {
+	Id   int    `json:"id"`
+	Main string `json:"string"`
 }
 
 func NewWeatherClient(baseUrl, apiKey string) *WeatherClient {
@@ -48,18 +52,17 @@ func (wc *WeatherClient) GetWeatherByPincode(pincode string) (*WeatherResponse, 
 	if err != nil {
 		return nil, fmt.Errorf("error parsing url : %s", err)
 	}
-	geoCoding, err := wc.GetLatLongByZipCode(pincode)
-	if err != nil {
-		return nil, fmt.Errorf("failed fetching lat long by pincode: %s", err)
-	}
 
-	baseUrl.Path += "/geo/1.0/reverse"
+	baseUrl.Path += "/data/2.5/weather"
 
 	params := url.Values{}
-	params.Add("lat", geoCoding.Lat)
-	params.Add("lon", geoCoding.Lon)
+	params.Add("q", pincode)
 	params.Add("limit", "5")
-	params.Add("appId", wc.config.apiKey)
+	params.Add("units", "metric")
+	params.Add("appid", wc.config.apiKey)
+
+	// Add query parameters to the base URL
+	baseUrl.RawQuery = params.Encode()
 
 	response, err := wc.client.Get(baseUrl.String())
 	if err != nil {
@@ -77,36 +80,4 @@ func (wc *WeatherClient) GetWeatherByPincode(pincode string) (*WeatherResponse, 
 		return nil, fmt.Errorf("failed to parse json: %s", err)
 	}
 	return &weatherResponse, nil
-}
-
-func (wc *WeatherClient) GetLatLongByZipCode(pincode string) (*GeoCodingResponse, error) {
-	baseUrl, err := url.Parse(wc.config.baseUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing url : %s", err)
-	}
-	baseUrl.Path += "/geo/1.0/zip"
-
-	// Add query parameters.
-	params := url.Values{}
-	params.Add("zip", pincode)
-	params.Add("limit", "5")
-	params.Add("appId", wc.config.apiKey)
-	baseUrl.RawQuery = params.Encode()
-	response, err := wc.client.Get(baseUrl.String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch by this error code: %w", err)
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	var getCodingRespond GeoCodingResponse
-	err = json.Unmarshal(body, &getCodingRespond)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse json: %s", err)
-	}
-
-	return &getCodingRespond, nil
 }
